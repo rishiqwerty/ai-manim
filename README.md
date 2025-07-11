@@ -5,6 +5,7 @@ Pre:
 ffmpeg
 Installation
 - for pycairo need to install  `brew install cairo pkg-config`
+- also install mactex for latex
 
 need to add poetry
 [tool.poetry.dependencies]

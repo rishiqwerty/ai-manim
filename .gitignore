@@ -175,3 +175,14 @@ cython_debug/
 
 .direnv/
 media/
+
+*.db
+*.mp4
+*.png
+*.jpg
+*.svg
+*.tex
+temp_scripts/
+output/
+
+.envrc.local
