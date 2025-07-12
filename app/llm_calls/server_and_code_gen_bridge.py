@@ -1,5 +1,5 @@
 from app.llm_calls.gemini import start_conversation
-from app.manim import code_cleanup, code_runner
+from worker.manim import code_cleanup, code_runner
 from datetime import datetime
 
 

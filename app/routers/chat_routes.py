@@ -1,20 +1,22 @@
 from datetime import datetime
-from fastapi import APIRouter, Request, BackgroundTasks
+from fastapi import APIRouter, Request, BackgroundTasks, Depends
 from pydantic import BaseModel
-from app.llm_calls.server_and_code_gen_bridge import handle_llm_request
+from shared_models.models import Conversation, Message, Job
+# from app.llm_calls.server_and_code_gen_bridge import handle_llm_request
+from app.celery_app import celery_app
+from sqlalchemy.orm import Session
+from shared_models.database import get_db
 router = APIRouter()
 
-class Message(BaseModel):
+class MessageSerializer(BaseModel):
     message: str
     # user: str
     # timestamp: str
     # id: int
     # conversation_id: int
 
-messages = {}
-
 @router.post("/{conversation_id}/message/")
-def send_message(request:Request, conversation_id, message: Message, background_tasks: BackgroundTasks):
+def send_message(request:Request, conversation_id, message: MessageSerializer, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Start a new conversation.
     """
@@ -35,18 +37,35 @@ def send_message(request:Request, conversation_id, message: Message, background_
     }
     if not user_id:
         return {"error": "User not found."}
-    if not conversation_id:
-        # Create a new conversation
-        if not user_id in messages:
-            messages[user_id] = {conversation_id: [actual_message]}
-    else:
-        if not user_id in messages:
-            messages[user_id] = {}
-        if conversation_id not in messages[user_id]:
-            messages[user_id][conversation_id] = []
-        messages[user_id][conversation_id].append(actual_message)
-    background_tasks.add_task(
-        handle_llm_request, user_id, conversation_id, message.message
+    conversation = db.query(Conversation).filter_by(id=conversation_id, user_id=user_id).first()
+    if not conversation:
+        return {"error": "Conversation not found."}
+    db_message = Message(
+        conversation_id=conversation_id,
+        message_type="user",
+        content=message.message,
+        created_at=datetime.now(),
+    )
+    db.add(db_message)
+    db.commit()
+    db.refresh(db_message)
+
+    job = Job(
+        conversation_id=conversation_id,
+        created_at=datetime.now(),
+        status="pending"
+    )
+    db.add(job)
+    db.commit()
+
+    # background_tasks.add_task(
+    #     handle_llm_request, user_id, conversation_id, message.message
+    # )
+    celery_app.send_task(
+        "tasks.code_generation_tasks.generate_code",
+        args=[user_id, conversation_id, message.message],
+        queue="code_generation_queue",
+        kwargs={"err": "", "retry": 0},
     )
     return {"message": "Video processing started. Comeback later to check the status."}
 
@@ -64,6 +83,45 @@ def get_messages(conversation_id: str, request: Request):
     else:
         return {"error": "Conversation not found."}
 
+@router.post("/conversation/")
+def create_conversation(request: Request, db: Session = Depends(get_db)):
+    """
+    Create a new conversation.
+    """
+    user_id = request.cookies.get("anonymous_id")
+    if not user_id:
+        return {"error": "User not found."}
+    
+    # Create a new conversation
+    conversation = Conversation(user_id=user_id)
+    db.add(conversation)
+    db.commit()
+    db.refresh(conversation)
+    
+    return {"conversation_id": conversation.id, "message": "Conversation created successfully."}
+
+@router.get("/jobs/status/{conversation_id}")
+def get_job_status(conversation_id: str, request: Request, db: Session = Depends(get_db)):
+    """
+    Get the status of the job for a conversation.
+    """
+    user_id = request.cookies.get("anonymous_id")
+    if not user_id:
+        return {"error": "User not found."}
+    
+    # Get the job status for the conversation
+    job = db.query(Job).filter_by(conversation_id=conversation_id).first()
+    if not job:
+        return {"error": "Job not found."}
+    
+    return {
+        "status": job.status,
+        "created_at": job.created_at.isoformat(),
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
+        "video_path": job.video_path,
+        "logs": job.logs
+    }
+#router
 # Once code is generated, we store it in s3, and provide the code to a docker container
 # that will run the manim code and generate the video
 

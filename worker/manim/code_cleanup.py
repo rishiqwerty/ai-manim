@@ -1,5 +1,6 @@
 import re
 import subprocess
+import os
 
 def extract_code(raw_text):
     # Remove markdown code fences
@@ -22,6 +23,9 @@ def extract_code(raw_text):
 
 def save_code_to_file(code, file_path):
     """Saves the extracted code to a specified file."""
+    if not os.path.exists("output/"):
+        os.makedirs("output/")    
+    file_path = os.path.join("output", file_path)
     with open(file_path, "w") as file:
         file.write(code)
     return file_path
