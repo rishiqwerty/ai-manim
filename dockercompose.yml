@@ -1,0 +1,53 @@
+version: "3.12"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile-api
+    container_name: api_server
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      - DEVELOPMENT=true
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  code_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+    container_name: code_worker
+    command: celery -A worker.celery_app worker --loglevel=info -Q code_generation_queue
+    volumes:
+      - .:/app
+    environment:
+      - DEVELOPMENT=true
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - api
+
+  render_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile-worker
+    container_name: render_worker
+    command: celery -A worker.celery_app worker --loglevel=info -Q video_render_queue
+    volumes:
+      - .:/app
+    environment:
+      - DEVELOPMENT=true
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+      - api
