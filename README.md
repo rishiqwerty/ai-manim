@@ -1,7 +1,5 @@
 
----
-
-📽️ AI-Manim Code Generator
+# 📽️ AI-Manim Code Generator
 
 This is a simple AI-powered Manim animation generator.
 It uses a language model (LLM) to generate Manim code from text prompts, cleans and formats the code, runs it to render videos, and serves the video output.
@@ -143,3 +141,11 @@ store per user's project wise conversation in chat_history table, limit the hist
 
 
 Annoynomous user -> makes request -> -->
+
+Conversation server
+|
+push event
+
+User → API Server → Create Job in DB + Enqueue Celery Task → SQS → Celery Worker
+     → Code Worker → Generates Python code → Stores in S3 or context → Enqueue Render Task
+     → Render Worker → Runs Manim → Uploads to S3 → Updates DB with status/video URL
